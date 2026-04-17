@@ -1,0 +1,25 @@
+{
+  "name": "tradenews-scraper",
+  "version": "1.0.0",
+  "description": "冻肉水产贸易新闻抓取服务",
+  "main": "api.js",
+  "scripts": {
+    "start": "node api.js",
+    "api": "node api.js",
+    "scrape": "node scraper.js",
+    "cron": "node cron.js",
+    "dev": "nodemon api.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
