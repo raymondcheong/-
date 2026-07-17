@@ -85,20 +85,35 @@ def resolve_order_file() -> Path:
 
 
 def resolve_rules_file() -> tuple[Path, str]:
-    """Return (path, mode) where mode is 'product_level_rules' or '多元分析'."""
-    plr = ROOT / "product_level_rules.xlsx"
-    multi = ROOT / "多元分析.xlsx"
-    if plr.exists():
-        return plr, "product_level_rules"
-    if multi.exists():
-        return multi, "多元分析"
-    raise FileNotFoundError("找不到 product_level_rules.xlsx 或 多元分析.xlsx")
+    """Return (path, mode) identifying which rules workbook was selected."""
+    candidates = [
+        (ROOT / "product_level_rules(18).xlsx", "product_level_rules(18)"),
+        (ROOT / "product_level_rules.xlsx", "product_level_rules"),
+        (ROOT / "多元分析.xlsx", "多元分析"),
+    ]
+    for path, mode in candidates:
+        if path.exists():
+            return path, mode
+    raise FileNotFoundError(
+        "找不到 product_level_rules(18).xlsx / product_level_rules.xlsx / 多元分析.xlsx"
+    )
+
+
+def resolve_frozen_file() -> Path:
+    candidates = [
+        ROOT / "凍肉(18).xlsx",
+        ROOT / "凍肉.xlsx",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError("找不到 凍肉(18).xlsx 或 凍肉.xlsx")
 
 
 def main() -> None:
     order_path = resolve_order_file()
     rules_path, rules_mode = resolve_rules_file()
-    frozen_path = ROOT / "凍肉.xlsx"
+    frozen_path = resolve_frozen_file()
 
     df = pd.read_excel(order_path, header=1)
     df = df.rename(
@@ -179,10 +194,15 @@ def main() -> None:
     # Association rules: yellow rows + same-category metrics
     wb = load_workbook(rules_path)
     sheet_names = wb.sheetnames
-    rules_sheet = "product_level_rules" if "product_level_rules" in sheet_names else sheet_names[0]
+    rules_sheet = sheet_names[0]
+    for cand in sheet_names:
+        name = str(cand)
+        if "product_level_rules" in name and "同中類" not in name and "same_category" not in name:
+            rules_sheet = cand
+            break
     ws = wb[rules_sheet]
     same_name = None
-    for cand in ["same_category_product_rules_wit", "同中類", "same_category"]:
+    for cand in ["同中類", "same_category_product_rules_wit", "same_category"]:
         if cand in sheet_names:
             same_name = cand
             break
@@ -672,11 +692,10 @@ def main() -> None:
 
     amount_disp = f"{total_amount / 10000:.1f}萬" if total_amount >= 1000 else f"{total_amount:,.2f}"
     boxes_disp = int(total_boxes) if float(total_boxes).is_integer() else total_boxes
-    rules_source = (
-        "product_level_rules.xlsx"
-        if rules_mode == "product_level_rules"
-        else "多元分析.xlsx（product_level_rules 工作表；未找到獨立 product_level_rules.xlsx）"
-    )
+    if rules_mode.startswith("product_level_rules"):
+        rules_source = rules_path.name
+    else:
+        rules_source = f"{rules_path.name}（product_level_rules 工作表）"
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-Hant">
@@ -850,10 +869,10 @@ th {{ background:#121c2a; color:var(--cyan); }}
     <input id="rmax" type="range" min="2" max="20" step="0.1" value="16.0" />
   </div>
   <div class="panel light"><div id="residCatPlot"></div></div>
-  <p class="note">取數來源：凍肉.xlsx（客戶屬性 × 小类）。調整 |殘差| 範圍後，不在範圍內的產品（小類）會直接隱藏。{resid_insight}。</p>
+  <p class="note">取數來源：{frozen_path.name}（客戶屬性 × 小类）。調整 |殘差| 範圍後，不在範圍內的產品（小類）會直接隱藏。{resid_insight}。</p>
   <div class="sub" style="text-align:left;margin-top:18px">下單時段 × 客戶屬性</div>
   <div class="panel light"><img class="img" src="data:image/png;base64,{resid_time_b64}" alt="時段殘差" /></div>
-  <p class="note">取數來源：區分客戶自助下單表（歷史已登記訂單，O列去重）。{time_insight}。</p>
+  <p class="note">取數來源：{order_path.name}（歷史已登記訂單，O列去重）。{time_insight}。</p>
 
   <h2 class="sec" id="s6">六、K-means 客戶聚類分析</h2>
   <div class="grid k-grid">{group_html}</div>
@@ -1095,6 +1114,7 @@ renderResidCat();
 
     summary = {
         "order_file": order_path.name,
+        "frozen_file": frozen_path.name,
         "rules_source": rules_source,
         "orders": n_orders,
         "amount": round(total_amount, 2),
