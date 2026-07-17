@@ -188,11 +188,8 @@ def main() -> None:
             break
     same_df = pd.read_excel(rules_path, sheet_name=same_name) if same_name else pd.DataFrame()
 
-    # Detect columns: if first sheet of product_level_rules.xlsx already has common_category
+    # Detect columns on main rules sheet; still join 同中類 for common_category when present
     header_row = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
-    has_common_in_main = any(
-        str(h).strip() in {"common_category", "category_internal_support"} for h in header_row if h
-    )
     col_map = {str(h).strip(): i + 1 for i, h in enumerate(header_row) if h}
 
     rules = []
@@ -224,23 +221,34 @@ def main() -> None:
         lift = float(ws.cell(r, col_map.get("lift", 8)).value)
         extra: dict = {}
 
-        if has_common_in_main:
-            if "common_category" in col_map:
-                cc = ws.cell(r, col_map["common_category"]).value
-                if cc is not None and str(cc).strip() != "":
-                    extra["common_category"] = cc
-            if "category_internal_support" in col_map:
-                cis = ws.cell(r, col_map["category_internal_support"]).value
-                if cis is not None and str(cis).strip() != "" and not (isinstance(cis, float) and np.isnan(cis)):
-                    extra["category_internal_support"] = float(cis)
-        elif not same_df.empty:
+        # Prefer metrics already on the main sheet when present
+        if "common_category" in col_map:
+            cc = ws.cell(r, col_map["common_category"]).value
+            if cc is not None and str(cc).strip() != "":
+                extra["common_category"] = cc
+        if "category_internal_support" in col_map:
+            cis = ws.cell(r, col_map["category_internal_support"]).value
+            if cis is not None and str(cis).strip() != "" and not (isinstance(cis, float) and np.isnan(cis)):
+                extra["category_internal_support"] = float(cis)
+
+        # Always try 同中類 / same_category sheet to fill common_category
+        # (and category_internal_support if missing on the main sheet)
+        if not same_df.empty and (
+            "common_category" not in extra or "category_internal_support" not in extra
+        ):
             for _, srow in same_df.iterrows():
                 if set(parse_fs(srow.get("antecedents"))) == set(ant_i) and set(
                     parse_fs(srow.get("consequents"))
                 ) == set(con_i):
-                    if "common_category" in srow and pd.notna(srow["common_category"]):
+                    if "common_category" not in extra and "common_category" in srow and pd.notna(
+                        srow["common_category"]
+                    ):
                         extra["common_category"] = srow["common_category"]
-                    if "category_internal_support" in srow and pd.notna(srow["category_internal_support"]):
+                    if (
+                        "category_internal_support" not in extra
+                        and "category_internal_support" in srow
+                        and pd.notna(srow["category_internal_support"])
+                    ):
                         extra["category_internal_support"] = float(srow["category_internal_support"])
                     break
 
@@ -856,10 +864,10 @@ th {{ background:#121c2a; color:var(--cyan); }}
   Support＝組合佔比；Confidence＝搭購轉化率；Lift＝相對平常購買機率的提升倍數（&gt;1 為正向關聯）。</p>
   <div class="grid rules">{"".join(rule_card(r) for r in rules) if rules else '<div class="panel note">未偵測到標黃組合。</div>'}</div>
   <img class="img" style="margin-top:12px" src="data:image/png;base64,{lift_b64}" alt="Lift對比" />
-  <div class="panel" style="margin-top:12px"><b>本週新增下單用戶（共 {len(new_customers)} 家）：</b>{new_cust_txt}</div>
 
   <h2 class="sec" id="s8">八、客戶下單次數與銷售額</h2>
-  <p class="note">按客戶名稱彙總，共 {n_customers} 家；O列去重後 {n_orders} 單，總金額 {total_amount:,.2f} 港元（較上週客戶數 {prev["customers"]} 家 {cust_delta}）。</p>
+  <p class="note">按客戶名稱（E列）彙總，共 {n_customers} 家；O列去重後 {n_orders} 單，總金額 {total_amount:,.2f} 港元（較上週客戶數 {prev["customers"]} 家 {cust_delta}）。</p>
+  <div class="panel" style="margin-bottom:12px"><b>本週新增下單用戶（共 {len(new_customers)} 家）：</b>{new_cust_txt}<div class="note" style="margin-top:6px">自動比對歷史已登記客戶名單；僅本週首次出現者列入。</div></div>
   <img class="img" src="data:image/png;base64,{cust_chart_b64}" alt="客戶下單" />
 
   <h2 class="sec" id="s9">九、產品下單統計</h2>
@@ -1095,6 +1103,8 @@ renderResidCat();
         "new_customers": new_customers,
         "attr": attr_counts.to_dict() if n_orders else {},
         "rules": len(rules),
+        "rules_with_common_category": sum(1 for r in rules if r.get("common_category") is not None),
+        "rules_with_cis": sum(1 for r in rules if r.get("category_internal_support") is not None),
         "groups": [
             (
                 g["name"],
