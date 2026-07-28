@@ -1027,8 +1027,8 @@ th,td {{ padding:4px 6px; }}
     <div class="panel kpi"><div class="label">推送總次數</div><div class="value">{push}</div>{wow_html(push, prev["push"])}</div>
     <div class="panel kpi"><div class="label">點擊總次數</div><div class="value">{clicks}</div>{wow_html(clicks, prev["clicks"])}</div>
     <div class="panel kpi"><div class="label">成功接收設備數</div><div class="value">{devices}</div>{wow_html(devices, prev["devices"])}</div>
-    <div class="panel kpi"><div class="label">APP 下單次數</div><div class="value">{n_orders}</div>{wow_html(n_orders, prev["orders"])}<div class="unit">佔總下單次數比例（可編輯）</div><div class="editable" contenteditable="true" data-key="ratio_orders">請手動填寫</div></div>
-    <div class="panel kpi"><div class="label">總金額（港元）</div><div class="value">{amount_disp}</div>{wow_html(total_amount, prev["amount"])}<div class="unit">佔總下單金額（可編輯）</div><div class="editable" contenteditable="true" data-key="ratio_amount">請手動填寫</div></div>
+    <div class="panel kpi"><div class="label">APP 下單次數</div><div class="value">{n_orders}</div>{wow_html(n_orders, prev["orders"])}</div>
+    <div class="panel kpi"><div class="label">總金額（港元）</div><div class="value">{amount_disp}</div>{wow_html(total_amount, prev["amount"])}</div>
     <div class="panel kpi trad"><div class="label">傳統渠道 APP 佔比（可編輯）</div><div class="value">金額佔比 / 次數佔比</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:11px;">
         <div>金額：<span class="editable" contenteditable="true" data-key="trad_amt" style="display:inline-block;min-width:40px;">____%</span></div>
