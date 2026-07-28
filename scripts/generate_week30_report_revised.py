@@ -13,6 +13,7 @@ import io
 import json
 import math
 import re
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -752,8 +753,47 @@ def main() -> None:
 
     tflat = [(rt.loc[a, h], a, h) for a in rt.index for h in rt.columns]
     tflat.sort(reverse=True)
-    time_parts = [f"「{a}」於 {h}:00 偏多（殘差 {v:.1f}）" for v, a, h in tflat[:5] if v >= 2]
-    time_insight = "；".join(time_parts[:4]) if time_parts else "下單時段集中於上午"
+    # Merge same-attribute multi-hour peaks into one sentence (esp. 飛機 8:00 & 15:00)
+    by_attr: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for v, a, h in tflat:
+        if v >= 2:
+            by_attr[str(a)].append((int(h), float(v)))
+
+    time_parts: list[str] = []
+    attr_order: list[str] = []
+    if "飛機" in by_attr:
+        attr_order.append("飛機")
+    for a, _ in sorted(
+        ((a, max(vs for _, vs in items)) for a, items in by_attr.items()),
+        key=lambda x: -x[1],
+    ):
+        if a not in attr_order:
+            attr_order.append(a)
+
+    for a in attr_order[:3]:
+        items = sorted(by_attr[a], key=lambda x: -x[1])
+        if a == "飛機":
+            prefer = {8, 15}
+            chosen = [(h, v) for h, v in items if h in prefer]
+            if len(chosen) < 2:
+                chosen = items[:2]
+            chosen = sorted(chosen, key=lambda x: x[0])
+            if len(chosen) >= 2:
+                hs = " 與 ".join(f"{h}:00" for h, _ in chosen)
+                rs = "、".join(f"{v:.1f}" for _, v in chosen)
+                time_parts.append(f"「飛機」客戶於 {hs} 下單最多（殘差分別為 {rs}）")
+            else:
+                h, v = chosen[0]
+                time_parts.append(f"「飛機」客戶於 {h}:00 下單最多（殘差 {v:.1f}）")
+        elif len(items) >= 2:
+            top2 = items[:2]
+            hs = " 與 ".join(f"{h}:00" for h, _ in sorted(top2, key=lambda x: x[0]))
+            rs = "、".join(f"{v:.1f}" for _, v in sorted(top2, key=lambda x: x[0]))
+            time_parts.append(f"「{a}」於 {hs} 偏多（殘差分別為 {rs}）")
+        else:
+            h, v = items[0]
+            time_parts.append(f"「{a}」於 {h}:00 偏多（殘差 {v:.1f}）")
+    time_insight = "；".join(time_parts) if time_parts else "下單時段集中於上午"
 
     def rule_card(r: dict) -> str:
         ant = "、".join(r["antecedents"])
@@ -1063,7 +1103,7 @@ th,td {{ padding:4px 6px; }}
     <input id="rmax" type="range" min="1" max="12" step="0.1" value="8" />
   </div>
   <div id="residCatPlot"></div>
-  <p class="note">取數來源：{frozen_path.name}（客戶屬性 × 小类）。{resid_insight}。</p>
+  <p class="note">取數來源：{frozen_path.name}（客戶屬性 × 小類）。{resid_insight}。</p>
   <div class="sub" style="text-align:left;margin-top:8px">下單時段 × 客戶屬性</div>
   <img class="img md" src="data:image/png;base64,{resid_time_b64}" alt="時段殘差" />
   <p class="note">取數：自助下單歷史（ERP 去重）。{time_insight}。</p>
