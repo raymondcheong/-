@@ -989,7 +989,8 @@ h2.sec {{ font-size:calc(16px * var(--head-scale)); margin:14px 0 6px; padding-b
 .page {{ page-break-after: always; break-after: page; }}
 .page:last-of-type {{ page-break-after: auto; break-after: auto; }}
 .row2 {{ display:grid; grid-template-columns:1.15fr 0.85fr; gap:10px; align-items:start; }}
-.s3box {{ text-align:center; }}
+.s3box {{ text-align:center; margin:4px auto 8px; }}
+.s3box .img.sm {{ margin-left:auto; margin-right:auto; display:block; }}
 table {{ font-size:11px; }}
 th,td {{ padding:4px 6px; }}
 .summary-block {{ margin:6px 0 8px; }}
@@ -1041,14 +1042,10 @@ th,td {{ padding:4px 6px; }}
   <p class="note">推送 → 接收設備 → 點擊消息 → 下單的轉化關係</p>
   <img class="img md" src="data:image/png;base64,{funnel_b64}" alt="轉化流程" />
 
-  <div class="row2">
-    <div>
-      <h2 class="sec" id="s3">三、多維度雷達圖</h2>
-      <p class="note">各指標相對表現（推送、接收設備、點擊、下單、品項箱數）</p>
-    </div>
-    <div class="s3box">
-      <img class="img sm" src="data:image/png;base64,{radar_b64}" alt="雷達圖" />
-    </div>
+  <h2 class="sec" id="s3">三、多維度雷達圖</h2>
+  <p class="note">各指標相對表現（推送、接收設備、點擊、下單、品項箱數）</p>
+  <div class="s3box">
+    <img class="img sm" src="data:image/png;base64,{radar_b64}" alt="雷達圖" />
   </div>
   </div>
 
