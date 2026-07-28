@@ -840,7 +840,7 @@ def main() -> None:
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>2026年第30周(7.20-7.26) B端商城運營分析報告修改版</title>
+<title>2026年第30周(7.20-7.26) B端商城運營分析報告</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
@@ -1011,8 +1011,8 @@ th,td {{ padding:4px 6px; }}
 </head>
 <body>
 <div class="wrap" id="reportRoot">
-  <h1>2026年第30周(7.20-7.26) B端商城運營分析報告修改版</h1>
-  <div class="sub">推送成效 · 客戶轉化 · 產品下單 · 下週計劃　｜　修改版 · 參考 push_data_report_promotion19_manual.pdf</div>
+  <h1>2026年第30周(7.20-7.26) B端商城運營分析報告</h1>
+  <div class="sub">推送成效 · 客戶轉化 · 產品下單 · 下週計劃　｜　參考 push_data_report_promotion19_manual.pdf</div>
   <div class="nav">
     <a href="#s1">推送成效</a><a href="#s2">客戶轉化</a><a href="#s3">雷達圖</a><a href="#s4">客戶屬性</a>
     <a href="#s5">殘差分析</a><a href="#s6">K-means</a><a href="#s7">關聯規則</a><a href="#s8">客戶/產品</a>
@@ -1308,12 +1308,12 @@ renderResidCat();
 </html>
 """
 
-    out = REPORT_DIR / "2026_week30_ops_report_revised.html"
+    out = REPORT_DIR / "2026_week30_ops_report.html"
     out.write_text(html, encoding="utf-8")
     # also copy to artifacts if available
     art = Path("/opt/cursor/artifacts")
     if art.exists():
-        (art / "2026_week30_ops_report_revised.html").write_text(html, encoding="utf-8")
+        (art / "2026_week30_ops_report.html").write_text(html, encoding="utf-8")
 
     summary = {
         "order_file": order_path.name,
