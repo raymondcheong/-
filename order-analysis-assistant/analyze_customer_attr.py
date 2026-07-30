@@ -3,26 +3,31 @@
 """
 智能订单数据分析助手 - 客户属性维度分析
 
+默认数据源：
+- 区分客户自助下单_清洗版1.csv（必须含「客戶屬性」「创建时间」列）
+
 功能：
 1) 按客户属性分析各产品（小类）采购金额、箱数及占比
 2) 按客户属性分析下单时段偏好（创建时间）
 
 字段约定（兼容简繁体 / 常见别名）：
-- 客户属性列：客户属性 / 客戶屬性
+- 客户属性列：客户属性 / 客戶屬性  （维度筛选，必填）
 - 金额列：订单总金额 / 訂單總金額（按订单分摊到行）
 - 产品列：小类 / 小類
 - 箱数列：销售数量
-- 时间列：创建时间
+- 时间列：创建时间                 （时段分析必填）
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 COLUMN_ALIASES = {
@@ -35,6 +40,18 @@ COLUMN_ALIASES = {
     "订单号": ["ERP订单号", "ERP訂單號", "订单号", "訂單號", "要货单号"],
 }
 
+ATTR_NORMALIZE = {
+    "加工": "批發-加工",
+    "飛機": "批發-飛機",
+    "飞机": "批發-飛機",
+    "烧腊": "燒臘",
+    "肉台": "肉檯",
+}
+
+DEFAULT_CSV = str(
+    Path(__file__).resolve().parent / "data" / "区分客户自助下单_清洗版1.csv"
+)
+
 
 def _norm_header(h: Any) -> str:
     if h is None:
@@ -42,7 +59,9 @@ def _norm_header(h: Any) -> str:
     return str(h).strip()
 
 
-def resolve_columns(headers: Iterable[Any]) -> Dict[str, str]:
+def resolve_columns(
+    headers: Iterable[Any], require_time: bool = False
+) -> Dict[str, str]:
     header_list = [_norm_header(h) for h in headers]
     mapping: Dict[str, str] = {}
     for canon, aliases in COLUMN_ALIASES.items():
@@ -51,12 +70,59 @@ def resolve_columns(headers: Iterable[Any]) -> Dict[str, str]:
                 mapping[canon] = h
                 break
     required = ["客户属性", "小类", "销售数量"]
+    if require_time:
+        required.append("创建时间")
     missing = [k for k in required if k not in mapping]
     if "订单总金额" not in mapping and "行金额" not in mapping:
         missing.append("订单总金额/行金额")
     if missing:
         raise ValueError(f"缺少必要列: {missing}; 实际表头={header_list}")
     return mapping
+
+
+def normalize_attr_value(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if not s or s.upper() in {"#N/A", "N/A", "NONE", "NULL", "NAN"}:
+        return ""
+    return ATTR_NORMALIZE.get(s, s)
+
+
+def normalize_source_rows(
+    rows: List[Dict[str, Any]], col: Dict[str, str]
+) -> List[Dict[str, Any]]:
+    """清洗客戶屬性 / 创建时间，保证后续维度分析可用。"""
+    attr_key = col["客户属性"]
+    time_key = col.get("创建时间")
+    cleaned: List[Dict[str, Any]] = []
+    for r in rows:
+        item = dict(r)
+        item[attr_key] = normalize_attr_value(item.get(attr_key))
+        if time_key:
+            h = parse_hour(item.get(time_key))
+            raw = item.get(time_key)
+            if isinstance(raw, datetime):
+                item[time_key] = raw.strftime("%Y-%m-%d %H:%M:%S")
+            elif raw is None:
+                item[time_key] = ""
+            else:
+                s = str(raw).strip()
+                item[time_key] = s
+            # 保留可解析小时的行标记，供校验
+            item["__hour__"] = h
+        cleaned.append(item)
+    return cleaned
+
+
+def list_customer_attrs(rows: List[Dict[str, Any]], col: Dict[str, str]) -> List[str]:
+    cnt: Counter = Counter()
+    key = col["客户属性"]
+    for r in rows:
+        v = normalize_attr_value(r.get(key))
+        if v:
+            cnt[v] += 1
+    return [k for k, _ in cnt.most_common()]
 
 
 def to_float(v: Any) -> float:
@@ -156,13 +222,11 @@ def _line_amounts(rows: List[Dict[str, Any]], col: Dict[str, str]) -> List[float
 
 
 def filter_attr(rows: List[Dict[str, Any]], col: Dict[str, str], attr: str) -> List[Dict[str, Any]]:
-    attr = str(attr).strip()
+    attr = normalize_attr_value(attr)
     out = []
+    key = col["客户属性"]
     for r in rows:
-        v = r.get(col["客户属性"])
-        if v is None:
-            continue
-        if str(v).strip() == attr:
+        if normalize_attr_value(r.get(key)) == attr:
             out.append(r)
     return out
 
@@ -173,13 +237,19 @@ def analyze_sales_by_customer_attr(
     customer_attr: str,
     top_n: int = 50,
 ) -> Dict[str, Any]:
-    col = resolve_columns(headers)
+    col = resolve_columns(headers, require_time=False)
+    rows = normalize_source_rows(rows, col)
     scoped = filter_attr(rows, col, customer_attr)
     if not scoped:
+        available = list_customer_attrs(rows, col)
         return {
             "analysis": "customer_attr_sales",
             "客户属性": customer_attr,
-            "error": f"未找到客户属性为「{customer_attr}」的订单数据",
+            "error": (
+                f"未找到客户属性为「{customer_attr}」的订单数据。"
+                f"当前「客戶屬性」可选值：{', '.join(available) if available else '无'}"
+            ),
+            "可用客户属性": available,
         }
 
     line_amts = _line_amounts(scoped, col)
@@ -209,7 +279,8 @@ def analyze_sales_by_customer_attr(
 
     return {
         "analysis": "customer_attr_sales",
-        "客户属性": customer_attr,
+        "客户属性": normalize_attr_value(customer_attr),
+        "维度字段": {"客户属性": col["客户属性"], "小类": col["小类"], "销售数量": col["销售数量"]},
         "订单行数": len(scoped),
         "产品数": len(by_prod),
         "总金额": round(total_amt, 2),
@@ -225,32 +296,38 @@ def analyze_order_time_by_customer_attr(
     customer_attr: str,
     window_hours: int = 2,
 ) -> Dict[str, Any]:
-    col = resolve_columns(headers)
-    if "创建时间" not in col:
-        return {
-            "analysis": "customer_attr_order_time",
-            "客户属性": customer_attr,
-            "error": "缺少创建时间列",
-        }
+    col = resolve_columns(headers, require_time=True)
+    rows = normalize_source_rows(rows, col)
     scoped = filter_attr(rows, col, customer_attr)
     if not scoped:
+        available = list_customer_attrs(rows, col)
         return {
             "analysis": "customer_attr_order_time",
             "客户属性": customer_attr,
-            "error": f"未找到客户属性为「{customer_attr}」的订单数据",
+            "error": (
+                f"未找到客户属性为「{customer_attr}」的订单数据。"
+                f"当前「客戶屬性」可选值：{', '.join(available) if available else '无'}"
+            ),
+            "可用客户属性": available,
         }
 
     hour_cnt: Dict[int, int] = defaultdict(int)
+    missing_time = 0
     for r in scoped:
-        h = parse_hour(r.get(col["创建时间"]))
-        if h is not None:
-            hour_cnt[h] += 1
+        h = r.get("__hour__")
+        if h is None:
+            h = parse_hour(r.get(col["创建时间"]))
+        if h is None:
+            missing_time += 1
+            continue
+        hour_cnt[h] += 1
     total = sum(hour_cnt.values())
     if total == 0:
         return {
             "analysis": "customer_attr_order_time",
             "客户属性": customer_attr,
-            "error": "无法解析创建时间",
+            "error": "「创建时间」列无法解析出有效小时，请检查清洗版 CSV 的创建时间格式",
+            "创建时间缺失行数": missing_time,
         }
 
     window_hours = max(1, int(window_hours))
@@ -260,7 +337,6 @@ def analyze_order_time_by_customer_attr(
         if c > best[0]:
             best = (c, start, start + window_hours)
 
-    # 若窗口扩大到覆盖>=60%仍连续，给出补充说明
     peak_h = max(hour_cnt, key=hour_cnt.get)
     hourly = []
     for h in range(24):
@@ -274,10 +350,13 @@ def analyze_order_time_by_customer_attr(
                 }
             )
 
+    attr_norm = normalize_attr_value(customer_attr)
     return {
         "analysis": "customer_attr_order_time",
-        "客户属性": customer_attr,
+        "客户属性": attr_norm,
+        "维度字段": {"客户属性": col["客户属性"], "创建时间": col["创建时间"]},
         "订单行数": total,
+        "创建时间缺失行数": missing_time,
         "偏好时段": f"{best[1]:02d}:00-{best[2]:02d}:00",
         "偏好时段订单行数": best[0],
         "偏好时段占比": round(best[0] / total * 100, 2),
@@ -286,11 +365,24 @@ def analyze_order_time_by_customer_attr(
         "峰值小时占比": round(hour_cnt[peak_h] / total * 100, 2),
         "分时明细": hourly,
         "结论": (
-            f"「{customer_attr}」更偏向于 {best[1]:02d}:00-{best[2]:02d}:00 下单，"
+            f"「{attr_norm}」更偏向于 {best[1]:02d}:00-{best[2]:02d}:00 下单，"
             f"该时段约占全部下单行的 {round(best[0] / total * 100, 2)}%；"
             f"峰值小时为 {peak_h:02d}:00-{peak_h+1:02d}:00。"
         ),
     }
+
+
+def load_csv_rows(path: str) -> Tuple[List[str], List[Dict[str, Any]]]:
+    with open(path, "r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            raise ValueError(f"CSV 无表头: {path}")
+        headers = [_norm_header(h) for h in reader.fieldnames]
+        rows: List[Dict[str, Any]] = []
+        for raw in reader:
+            row = {_norm_header(k): v for k, v in raw.items()}
+            rows.append(row)
+    return headers, rows
 
 
 def load_excel_rows(path: str, sheet: Optional[str] = None) -> Tuple[List[str], List[Dict[str, Any]]]:
@@ -309,6 +401,40 @@ def load_excel_rows(path: str, sheet: Optional[str] = None) -> Tuple[List[str], 
             continue
         rows.append(dict(zip(headers, row)))
     wb.close()
+    return headers, rows
+
+
+def load_order_rows(
+    path: str, sheet: Optional[str] = None
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """加载清洗版 CSV / Excel。优先识别 .csv。"""
+    suffix = Path(path).suffix.lower()
+    if suffix == ".csv":
+        headers, rows = load_csv_rows(path)
+    elif suffix in {".xlsx", ".xlsm", ".xls"}:
+        headers, rows = load_excel_rows(path, sheet)
+    else:
+        # 尝试 CSV
+        try:
+            headers, rows = load_csv_rows(path)
+        except Exception:
+            headers, rows = load_excel_rows(path, sheet)
+
+    # 强制校验关键维度列存在
+    lower_map = {h: h for h in headers}
+    has_attr = any(h in COLUMN_ALIASES["客户属性"] for h in headers)
+    has_time = any(h in COLUMN_ALIASES["创建时间"] for h in headers)
+    if not has_attr:
+        raise ValueError(
+            "数据源缺少「客戶屬性」列。请使用清洗版 CSV："
+            "区分客户自助下单_清洗版1.csv"
+        )
+    if not has_time:
+        raise ValueError(
+            "数据源缺少「创建时间」列。请使用清洗版 CSV："
+            "区分客户自助下单_清洗版1.csv"
+        )
+    _ = lower_map  # silence lint
     return headers, rows
 
 
@@ -351,10 +477,15 @@ def format_time_report(result: Dict[str, Any]) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="客户属性维度订单分析")
-    parser.add_argument("excel", help="订单 Excel 路径")
-    parser.add_argument("--sheet", default=None, help="工作表名，默认第一个")
-    parser.add_argument("--attr", required=True, help="客户属性，如：凍肉店")
+    parser = argparse.ArgumentParser(description="客户属性维度订单分析（清洗版 CSV）")
+    parser.add_argument(
+        "data",
+        nargs="?",
+        default=DEFAULT_CSV,
+        help="订单数据路径（默认：data/区分客户自助下单_清洗版1.csv）",
+    )
+    parser.add_argument("--sheet", default=None, help="Excel 工作表名（CSV 可忽略）")
+    parser.add_argument("--attr", default="", help="客户属性，如：凍肉店")
     parser.add_argument(
         "--mode",
         choices=["sales", "time", "both"],
@@ -363,9 +494,21 @@ def main():
     )
     parser.add_argument("--window", type=int, default=2, help="偏好时段窗口小时数")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
+    parser.add_argument(
+        "--list-attrs",
+        action="store_true",
+        help="仅列出数据源中的客戶屬性取值后退出",
+    )
     args = parser.parse_args()
 
-    headers, rows = load_excel_rows(args.excel, args.sheet)
+    headers, rows = load_order_rows(args.data, args.sheet)
+    col = resolve_columns(headers, require_time=True)
+    if args.list_attrs:
+        print("\n".join(list_customer_attrs(rows, col)))
+        return
+    if not str(args.attr).strip():
+        parser.error("请通过 --attr 指定客戶屬性，或使用 --list-attrs 查看可选值")
+
     outputs = []
     if args.mode in ("sales", "both"):
         outputs.append(analyze_sales_by_customer_attr(rows, headers, args.attr))

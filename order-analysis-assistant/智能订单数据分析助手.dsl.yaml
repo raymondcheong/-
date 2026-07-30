@@ -1,5 +1,5 @@
 app:
-  description: 智能订单数据分析助手：支持按客户属性分析各产品（小类）采购金额/箱数及占比，以及按客户属性分析下单时段偏好。
+  description: 智能订单数据分析助手。默认数据源为「区分客户自助下单_清洗版1.csv」，必须使用「客戶屬性」做客户维度筛选，使用「创建时间」做下单时段分析；并按小类统计金额/箱数及占比。
   icon: 📊
   icon_background: '#E8F5E9'
   mode: advanced-chat
@@ -14,9 +14,9 @@ workflow:
   features:
     file_upload:
       allowed_file_extensions:
+      - .CSV
       - .XLSX
       - .XLS
-      - .CSV
       allowed_file_types:
       - document
       allowed_file_upload_methods:
@@ -38,9 +38,10 @@ workflow:
         - remote_url
       number_limits: 3
     opening_statement: |-
-      你好，我是智能订单数据分析助手。请上传订单明细 Excel，然后可以这样问我：
+      你好，我是智能订单数据分析助手。
+      请上传数据源「区分客户自助下单_清洗版1.csv」（需含「客戶屬性」「创建时间」列），然后可以问：
       1）凍肉店采购各个产品的金额、箱数及占比
-      2）凍肉店更偏向于几点到几点下单
+      2）凍肉店更偏向于几点到几点下单（基于创建时间）
     retriever_resource:
       enabled: false
     sensitive_word_avoidance:
@@ -48,9 +49,9 @@ workflow:
     speech_to_text:
       enabled: false
     suggested_questions:
-    - 分析凍肉店各产品（小类）的采购金额、箱数及占比
-    - 凍肉店更偏向于几点到几点下单？
-    - 对比批發-加工与凍肉店的下单时段偏好
+    - 基于清洗版CSV，分析凍肉店各小类的金额、箱数及占比
+    - 凍肉店更偏向于几点到几点下单？请用创建时间分析
+    - 列出各客戶屬性的下单时段偏好
     suggested_questions_after_answer:
       enabled: true
     text_to_speech:
@@ -127,15 +128,15 @@ workflow:
         type: start
         variables:
         - allowed_file_extensions:
+          - .csv
           - .xlsx
           - .xls
-          - .csv
           allowed_file_types:
           - document
           allowed_file_upload_methods:
           - local_file
           - remote_url
-          label: 订单文件
+          label: 订单清洗版CSV
           max_length: 1
           options: []
           required: true
@@ -179,9 +180,10 @@ workflow:
     - data:
         desc: 从用户问题中提取客户属性与分析类型
         instruction: |-
-          你是订单分析参数提取器。根据用户问题提取：
-          1) customer_attr：客户属性，例如 凍肉店、批發-加工、批發-飛機、燒臘、肉檯。若未提到则留空。
-          2) analysis_mode：sales（产品金额/箱数占比）、time（下单时段偏好）、both（两者都要）。
+          你是订单分析参数提取器。数据源为「区分客户自助下单_清洗版1.csv」。
+          必须围绕「客戶屬性」「创建时间」两列提取参数：
+          1) customer_attr：來自「客戶屬性」列的值，例如 凍肉店、批發-加工、批發-飛機、燒臘、肉檯、小餐。未提到则留空。
+          2) analysis_mode：sales（按客戶屬性看小类金额/箱数占比）、time（按客戶屬性+创建时间看下单时段）、both。
           3) window_hours：偏好时段窗口小时数，默认 2。
           只提取参数，不要回答业务问题。
         model:
@@ -489,14 +491,14 @@ workflow:
               try:
                   headers, rows = parse_table_text(table_text)
                   if not headers or not rows:
-                      return {"result": "未能解析表格数据，请确认已上传订单 Excel，且文档提取结果非空。", "json_result": "{}"}
+                      return {"result": "未能解析表格数据，请上传「区分客户自助下单_清洗版1.csv」，并确认含「客戶屬性」「创建时间」列。", "json_result": "{}"}
                   col = resolve_columns(headers)
-                  need = ["客户属性", "小类", "销售数量"]
+                  need = ["客户属性", "小类", "销售数量", "创建时间"]
                   miss = [k for k in need if k not in col]
                   if "订单总金额" not in col and "行金额" not in col:
                       miss.append("订单总金额")
                   if miss:
-                      return {"result": f"缺少必要列: {miss}；实际表头: {headers}", "json_result": "{}"}
+                      return {"result": f"清洗版数据缺少必要列: {miss}；实际表头: {headers}。请确认CSV含「客戶屬性」「创建时间」。", "json_result": "{}"}
                   attr = (customer_attr or "").strip()
                   if not attr:
                       # 若未指定，默认取样本中出现最多的属性
@@ -533,7 +535,7 @@ workflow:
               except Exception as e:
                   return {"result": f"分析失败: {e}", "json_result": "{}"}
         code_language: python3
-        desc: 按客户属性统计产品金额/箱数占比，并分析下单时段偏好
+        desc: 基于清洗版CSV：按「客戶屬性」筛选，结合「创建时间」与小类/金额/箱数做分析
         outputs:
           result:
             children: null
@@ -593,25 +595,21 @@ workflow:
         - id: sys-prompt-1
           role: system
           text: |-
-            你是「智能订单数据分析助手」。请基于代码节点输出的分析结果，用简洁专业的中文回答用户。
+            你是「智能订单数据分析助手」。数据源为清洗版订单 CSV，关键维度列是：
+            - 「客戶屬性」：客户类型维度（如凍肉店）
+            - 「创建时间」：下单时间，用于时段偏好
+            - 「小类」「销售数量」「订单总金额」：产品销售金额/箱数
 
-            ## 你支持的核心能力
-            1. **客户属性 × 产品销售分析**：按「客户属性」筛选（如凍肉店），统计各「小类」的：
-               - 金额（来自「订单总金额」，多商品订单按销售数量分摊）
-               - 箱数（「销售数量」）
-               - 金额占比、箱数占比
-            2. **客户属性 × 下单时段偏好**：按「客户属性」统计「创建时间」的小时分布，给出更偏向的几点到几点下单、峰值小时及占比。
-
-            ## 回答要求
-            - 保留关键数字、表格与结论，不要编造数据
-            - 若结果含 error，明确说明缺什么数据或字段
-            - 可补 1-2 句业务解读，但必须基于结果
-            - 使用简体或繁体跟随用户问题
+            请基于代码节点输出回答用户，要求：
+            1. 销售分析必须体现客戶屬性筛选后的小类金额、箱数及占比
+            2. 时段分析必须基于创建时间，明确给出更偏向几点到几点
+            3. 不编造数据；若缺客戶屬性或创建时间，明确提示
+            4. 语言跟随用户（简/繁）
 
             ## 分析结果
             {{#analyzer.result#}}
 
-            ## 结构化JSON（可选参考）
+            ## 结构化JSON
             {{#analyzer.json_result#}}
         - id: user-prompt-1
           role: user
