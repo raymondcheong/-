@@ -1,0 +1,662 @@
+app:
+  description: 智能订单数据分析助手：支持按客户属性分析各产品（小类）采购金额/箱数及占比，以及按客户属性分析下单时段偏好。
+  icon: 📊
+  icon_background: '#E8F5E9'
+  mode: advanced-chat
+  name: 智能订单数据分析助手
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .XLSX
+      - .XLS
+      - .CSV
+      allowed_file_types:
+      - document
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: true
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 50
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: |-
+      你好，我是智能订单数据分析助手。请上传订单明细 Excel，然后可以这样问我：
+      1）凍肉店采购各个产品的金额、箱数及占比
+      2）凍肉店更偏向于几点到几点下单
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions:
+    - 分析凍肉店各产品（小类）的采购金额、箱数及占比
+    - 凍肉店更偏向于几点到几点下单？
+    - 对比批發-加工与凍肉店的下单时段偏好
+    suggested_questions_after_answer:
+      enabled: true
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: document-extractor
+      id: start-source-doc-target
+      source: start
+      sourceHandle: source
+      target: doc_extractor
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: document-extractor
+        targetType: parameter-extractor
+      id: doc-source-pe-target
+      source: doc_extractor
+      sourceHandle: source
+      target: param_extractor
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: parameter-extractor
+        targetType: code
+      id: pe-source-code-target
+      source: param_extractor
+      sourceHandle: source
+      target: analyzer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: llm
+      id: code-source-llm-target
+      source: analyzer
+      sourceHandle: source
+      target: answer_llm
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: llm-source-answer-target
+      source: answer_llm
+      sourceHandle: source
+      target: answer
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: 上传订单 Excel，并输入分析问题
+        selected: false
+        title: 开始
+        type: start
+        variables:
+        - allowed_file_extensions:
+          - .xlsx
+          - .xls
+          - .csv
+          allowed_file_types:
+          - document
+          allowed_file_upload_methods:
+          - local_file
+          - remote_url
+          label: 订单文件
+          max_length: 1
+          options: []
+          required: true
+          type: file
+          variable: order_file
+      height: 110
+      id: start
+      position:
+        x: 30
+        y: 280
+      positionAbsolute:
+        x: 30
+        y: 280
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: 从 Excel 提取表格文本
+        is_array_file: false
+        selected: false
+        title: 文档提取器
+        type: document-extractor
+        variable_selector:
+        - start
+        - order_file
+      height: 90
+      id: doc_extractor
+      position:
+        x: 340
+        y: 286
+      positionAbsolute:
+        x: 340
+        y: 286
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: 从用户问题中提取客户属性与分析类型
+        instruction: |-
+          你是订单分析参数提取器。根据用户问题提取：
+          1) customer_attr：客户属性，例如 凍肉店、批發-加工、批發-飛機、燒臘、肉檯。若未提到则留空。
+          2) analysis_mode：sales（产品金额/箱数占比）、time（下单时段偏好）、both（两者都要）。
+          3) window_hours：偏好时段窗口小时数，默认 2。
+          只提取参数，不要回答业务问题。
+        model:
+          completion_params:
+            temperature: 0.1
+          mode: chat
+          name: gpt-4o-mini
+          provider: openai
+        parameters:
+        - description: 客户属性，如凍肉店
+          name: customer_attr
+          required: false
+          type: string
+        - description: 分析模式：sales / time / both
+          name: analysis_mode
+          required: false
+          type: string
+        - description: 偏好时段窗口小时数，默认2
+          name: window_hours
+          required: false
+          type: string
+        query:
+        - sys
+        - query
+        reasoning_mode: prompt
+        selected: false
+        title: 提取分析参数
+        type: parameter-extractor
+        vision:
+          enabled: false
+      height: 90
+      id: param_extractor
+      position:
+        x: 650
+        y: 286
+      positionAbsolute:
+        x: 650
+        y: 286
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: |
+          import json
+          import math
+          import re
+          from collections import defaultdict
+          from datetime import datetime
+
+          ALIASES = {
+              "客户属性": ["客户属性", "客戶屬性", "客戶性質", "客户性质"],
+              "订单总金额": ["订单总金额", "訂單總金額"],
+              "行金额": ["合计含税金额", "合計含稅金額", "金额", "金額"],
+              "小类": ["小类", "小類", "产品", "產品"],
+              "销售数量": ["销售数量", "銷售數量", "箱数", "箱數", "辅助数量"],
+              "创建时间": ["创建时间", "創建時間", "创建時間", "下单时间", "下單時間"],
+              "订单号": ["ERP订单号", "ERP訂單號", "订单号", "訂單號", "要货单号"],
+          }
+
+          def to_float(v):
+              if v is None or v == "":
+                  return 0.0
+              if isinstance(v, (int, float)):
+                  if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                      return 0.0
+                  return float(v)
+              s = str(v).strip().replace(",", "").replace("，", "")
+              if not s or s.upper() in {"N/A", "#N/A", "NULL", "NONE"}:
+                  return 0.0
+              try:
+                  return float(s)
+              except Exception:
+                  return 0.0
+
+          def parse_hour(v):
+              if v is None or v == "":
+                  return None
+              if hasattr(v, "hour"):
+                  return int(v.hour)
+              s = str(v).strip()
+              for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y/%m/%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%H:%M:%S", "%H:%M"):
+                  try:
+                      return datetime.strptime(s, fmt).hour
+                  except Exception:
+                      pass
+              m = re.search(r"(\d{1,2}):\d{2}", s)
+              if m:
+                  h = int(m.group(1))
+                  if 0 <= h <= 23:
+                      return h
+              return None
+
+          def parse_table_text(table_text: str):
+              text = (table_text or "").strip()
+              if not text:
+                  return [], []
+              # try JSON list
+              if text[0] in "[{":
+                  try:
+                      data = json.loads(text)
+                      if isinstance(data, dict) and "data" in data:
+                          data = data["data"]
+                      if isinstance(data, list) and data and isinstance(data[0], dict):
+                          headers = list(data[0].keys())
+                          return headers, data
+                  except Exception:
+                      pass
+              lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+              # markdown table
+              md = [ln for ln in lines if "|" in ln]
+              if len(md) >= 2:
+                  def split_md(ln):
+                      parts = [p.strip() for p in ln.strip().strip("|").split("|")]
+                      return parts
+                  headers = split_md(md[0])
+                  rows = []
+                  for ln in md[1:]:
+                      if re.match(r"^[\s|:\-]+$", ln):
+                          continue
+                      vals = split_md(ln)
+                      if len(vals) < len(headers):
+                          vals += [""] * (len(headers) - len(vals))
+                      rows.append(dict(zip(headers, vals[:len(headers)])))
+                  if rows:
+                      return headers, rows
+              # csv/tsv
+              delim = "," if lines[0].count(",") >= lines[0].count("\t") else "\t"
+              headers = [h.strip() for h in lines[0].split(delim)]
+              rows = []
+              for ln in lines[1:]:
+                  vals = [v.strip() for v in ln.split(delim)]
+                  if len(vals) < len(headers):
+                      vals += [""] * (len(headers) - len(vals))
+                  rows.append(dict(zip(headers, vals[:len(headers)])))
+              return headers, rows
+
+          def resolve_columns(headers):
+              mapping = {}
+              for canon, aliases in ALIASES.items():
+                  for h in headers:
+                      hs = str(h).strip() if h is not None else ""
+                      if hs in aliases:
+                          mapping[canon] = hs
+                          break
+              return mapping
+
+          def order_key(row, col, idx):
+              if "订单号" in col:
+                  oid = row.get(col["订单号"])
+                  if oid not in (None, ""):
+                      return str(oid)
+              return f"__row_{idx}"
+
+          def line_amounts(rows, col):
+              n = len(rows)
+              amounts = [0.0] * n
+              if "行金额" in col:
+                  by_order = defaultdict(list)
+                  for i, r in enumerate(rows):
+                      by_order[order_key(r, col, i)].append(i)
+                  use_line = False
+                  for idxs in by_order.values():
+                      vals = {round(to_float(rows[i].get(col["行金额"])), 4) for i in idxs}
+                      if len(idxs) > 1 and len(vals) > 1:
+                          use_line = True
+                          break
+                  if use_line:
+                      return [to_float(r.get(col["行金额"])) for r in rows]
+              if "订单总金额" not in col:
+                  if "行金额" in col:
+                      return [to_float(r.get(col["行金额"])) for r in rows]
+                  return amounts
+              by_order = defaultdict(list)
+              for i, r in enumerate(rows):
+                  by_order[order_key(r, col, i)].append(i)
+              for idxs in by_order.values():
+                  order_amt = 0.0
+                  for i in idxs:
+                      order_amt = max(order_amt, to_float(rows[i].get(col["订单总金额"])))
+                  qtys = [to_float(rows[i].get(col["销售数量"])) for i in idxs]
+                  qsum = sum(qtys)
+                  if qsum > 0:
+                      for i, q in zip(idxs, qtys):
+                          amounts[i] = order_amt * (q / qsum)
+                  else:
+                      share = order_amt / len(idxs) if idxs else 0.0
+                      for i in idxs:
+                          amounts[i] = share
+              return amounts
+
+          def filter_attr(rows, col, attr):
+              attr = str(attr).strip()
+              return [r for r in rows if str(r.get(col.get("客户属性"), "") or "").strip() == attr]
+
+          def analyze_sales(rows, col, attr):
+              scoped = filter_attr(rows, col, attr)
+              if not scoped:
+                  return {"analysis": "customer_attr_sales", "客户属性": attr, "error": f"未找到客户属性为「{attr}」的数据"}
+              amts = line_amounts(scoped, col)
+              by_prod = defaultdict(lambda: [0.0, 0.0])
+              for r, amt in zip(scoped, amts):
+                  prod = str(r.get(col["小类"]) or "未知").strip() or "未知"
+                  qty = to_float(r.get(col["销售数量"]))
+                  by_prod[prod][0] += amt
+                  by_prod[prod][1] += qty
+              total_amt = sum(v[0] for v in by_prod.values())
+              total_qty = sum(v[1] for v in by_prod.values())
+              details = []
+              for prod, (amt, qty) in by_prod.items():
+                  details.append({
+                      "小类": prod,
+                      "金额": round(amt, 2),
+                      "箱数": round(qty, 2),
+                      "金额占比": round(amt / total_amt * 100, 2) if total_amt else 0.0,
+                      "箱数占比": round(qty / total_qty * 100, 2) if total_qty else 0.0,
+                  })
+              details.sort(key=lambda x: (-x["金额"], -x["箱数"], x["小类"]))
+              return {
+                  "analysis": "customer_attr_sales",
+                  "客户属性": attr,
+                  "订单行数": len(scoped),
+                  "产品数": len(by_prod),
+                  "总金额": round(total_amt, 2),
+                  "总箱数": round(total_qty, 2),
+                  "明细": details,
+              }
+
+          def analyze_time(rows, col, attr, window_hours=2):
+              if "创建时间" not in col:
+                  return {"analysis": "customer_attr_order_time", "客户属性": attr, "error": "缺少创建时间列"}
+              scoped = filter_attr(rows, col, attr)
+              if not scoped:
+                  return {"analysis": "customer_attr_order_time", "客户属性": attr, "error": f"未找到客户属性为「{attr}」的数据"}
+              hour_cnt = defaultdict(int)
+              for r in scoped:
+                  h = parse_hour(r.get(col["创建时间"]))
+                  if h is not None:
+                      hour_cnt[h] += 1
+              total = sum(hour_cnt.values())
+              if not total:
+                  return {"analysis": "customer_attr_order_time", "客户属性": attr, "error": "无法解析创建时间"}
+              window_hours = max(1, int(window_hours or 2))
+              best = (0, 0, window_hours)
+              for start in range(0, 24 - window_hours + 1):
+                  c = sum(hour_cnt.get(h, 0) for h in range(start, start + window_hours))
+                  if c > best[0]:
+                      best = (c, start, start + window_hours)
+              peak_h = max(hour_cnt, key=hour_cnt.get)
+              hourly = []
+              for h in range(24):
+                  c = hour_cnt.get(h, 0)
+                  if c:
+                      hourly.append({"小时": f"{h:02d}:00-{h+1:02d}:00", "订单行数": c, "占比": round(c / total * 100, 2)})
+              return {
+                  "analysis": "customer_attr_order_time",
+                  "客户属性": attr,
+                  "订单行数": total,
+                  "偏好时段": f"{best[1]:02d}:00-{best[2]:02d}:00",
+                  "偏好时段订单行数": best[0],
+                  "偏好时段占比": round(best[0] / total * 100, 2),
+                  "峰值小时": f"{peak_h:02d}:00-{peak_h+1:02d}:00",
+                  "峰值小时订单行数": hour_cnt[peak_h],
+                  "峰值小时占比": round(hour_cnt[peak_h] / total * 100, 2),
+                  "分时明细": hourly,
+                  "结论": f"「{attr}」更偏向于 {best[1]:02d}:00-{best[2]:02d}:00 下单，该时段约占 {round(best[0]/total*100, 2)}%；峰值小时为 {peak_h:02d}:00-{peak_h+1:02d}:00。",
+              }
+
+          def format_sales(result):
+              if result.get("error"):
+                  return result["error"]
+              lines = [
+                  f"## 客户属性销售分析：{result['客户属性']}",
+                  f"- 订单行数：{result['订单行数']}",
+                  f"- 产品数（小类）：{result['产品数']}",
+                  f"- 总金额：{result['总金额']}",
+                  f"- 总箱数：{result['总箱数']}",
+                  "",
+                  "| 小类 | 金额 | 金额占比 | 箱数 | 箱数占比 |",
+                  "|---|---:|---:|---:|---:|",
+              ]
+              for d in result["明细"]:
+                  lines.append(f"| {d['小类']} | {d['金额']} | {d['金额占比']}% | {d['箱数']} | {d['箱数占比']}% |")
+              return "\n".join(lines)
+
+          def format_time(result):
+              if result.get("error"):
+                  return result["error"]
+              lines = [
+                  f"## 客户属性下单时段分析：{result['客户属性']}",
+                  f"- 订单行数：{result['订单行数']}",
+                  f"- 偏好时段：{result['偏好时段']}（{result['偏好时段占比']}%）",
+                  f"- 峰值小时：{result['峰值小时']}（{result['峰值小时占比']}%）",
+                  f"- 结论：{result['结论']}",
+                  "",
+                  "| 时段 | 订单行数 | 占比 |",
+                  "|---|---:|---:|",
+              ]
+              for d in sorted(result["分时明细"], key=lambda x: -x["订单行数"]):
+                  lines.append(f"| {d['小时']} | {d['订单行数']} | {d['占比']}% |")
+              return "\n".join(lines)
+
+          def main(table_text: str, customer_attr: str, analysis_mode: str = "both", window_hours: str = "2") -> dict:
+              try:
+                  headers, rows = parse_table_text(table_text)
+                  if not headers or not rows:
+                      return {"result": "未能解析表格数据，请确认已上传订单 Excel，且文档提取结果非空。", "json_result": "{}"}
+                  col = resolve_columns(headers)
+                  need = ["客户属性", "小类", "销售数量"]
+                  miss = [k for k in need if k not in col]
+                  if "订单总金额" not in col and "行金额" not in col:
+                      miss.append("订单总金额")
+                  if miss:
+                      return {"result": f"缺少必要列: {miss}；实际表头: {headers}", "json_result": "{}"}
+                  attr = (customer_attr or "").strip()
+                  if not attr:
+                      # 若未指定，默认取样本中出现最多的属性
+                      cnt = defaultdict(int)
+                      for r in rows:
+                          v = str(r.get(col["客户属性"]) or "").strip()
+                          if v and v.upper() not in {"#N/A", "N/A", "NONE"}:
+                              cnt[v] += 1
+                      attr = max(cnt, key=cnt.get) if cnt else ""
+                  if not attr:
+                      return {"result": "未能识别客户属性，请在问题中指定，例如：凍肉店", "json_result": "{}"}
+                  mode = (analysis_mode or "both").strip().lower()
+                  if mode in ("销售", "銷售", "sales", "product", "产品", "產品"):
+                      mode = "sales"
+                  elif mode in ("时间", "時間", "time", "时段", "時段", "下单"):
+                      mode = "time"
+                  else:
+                      mode = "both"
+                  try:
+                      wh = int(float(window_hours)) if str(window_hours).strip() else 2
+                  except Exception:
+                      wh = 2
+                  parts = []
+                  payload = {}
+                  if mode in ("sales", "both"):
+                      sales = analyze_sales(rows, col, attr)
+                      parts.append(format_sales(sales))
+                      payload["sales"] = sales
+                  if mode in ("time", "both"):
+                      t = analyze_time(rows, col, attr, wh)
+                      parts.append(format_time(t))
+                      payload["time"] = t
+                  return {"result": "\n\n".join(parts), "json_result": json.dumps(payload, ensure_ascii=False)}
+              except Exception as e:
+                  return {"result": f"分析失败: {e}", "json_result": "{}"}
+        code_language: python3
+        desc: 按客户属性统计产品金额/箱数占比，并分析下单时段偏好
+        outputs:
+          result:
+            children: null
+            type: string
+          json_result:
+            children: null
+            type: string
+        selected: false
+        title: 客户属性分析引擎
+        type: code
+        variables:
+        - value_selector:
+          - doc_extractor
+          - text
+          value_type: string
+          variable: table_text
+        - value_selector:
+          - param_extractor
+          - customer_attr
+          value_type: string
+          variable: customer_attr
+        - value_selector:
+          - param_extractor
+          - analysis_mode
+          value_type: string
+          variable: analysis_mode
+        - value_selector:
+          - param_extractor
+          - window_hours
+          value_type: string
+          variable: window_hours
+      height: 52
+      id: analyzer
+      position:
+        x: 960
+        y: 300
+      positionAbsolute:
+        x: 960
+        y: 300
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 把分析结果整理成可读回复
+        model:
+          completion_params:
+            temperature: 0.3
+          mode: chat
+          name: gpt-4o-mini
+          provider: openai
+        prompt_template:
+        - id: sys-prompt-1
+          role: system
+          text: |-
+            你是「智能订单数据分析助手」。请基于代码节点输出的分析结果，用简洁专业的中文回答用户。
+
+            ## 你支持的核心能力
+            1. **客户属性 × 产品销售分析**：按「客户属性」筛选（如凍肉店），统计各「小类」的：
+               - 金额（来自「订单总金额」，多商品订单按销售数量分摊）
+               - 箱数（「销售数量」）
+               - 金额占比、箱数占比
+            2. **客户属性 × 下单时段偏好**：按「客户属性」统计「创建时间」的小时分布，给出更偏向的几点到几点下单、峰值小时及占比。
+
+            ## 回答要求
+            - 保留关键数字、表格与结论，不要编造数据
+            - 若结果含 error，明确说明缺什么数据或字段
+            - 可补 1-2 句业务解读，但必须基于结果
+            - 使用简体或繁体跟随用户问题
+
+            ## 分析结果
+            {{#analyzer.result#}}
+
+            ## 结构化JSON（可选参考）
+            {{#analyzer.json_result#}}
+        - id: user-prompt-1
+          role: user
+          text: '{{#sys.query#}}'
+        selected: false
+        title: 结果解读
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 90
+      id: answer_llm
+      position:
+        x: 1270
+        y: 286
+      positionAbsolute:
+        x: 1270
+        y: 286
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        answer: '{{#answer_llm.text#}}'
+        desc: ''
+        selected: false
+        title: 直接回复
+        type: answer
+        variables: []
+      height: 100
+      id: answer
+      position:
+        x: 1580
+        y: 286
+      positionAbsolute:
+        x: 1580
+        y: 286
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: -40
+      y: 80
+      zoom: 0.85
+  rag_pipeline_variables: []
