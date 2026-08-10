@@ -895,7 +895,8 @@ def main() -> None:
         # (均值中心相加 ≠ 總額，先前因此被誤讀。)
         m_sum = g["monetary_sum"]
         groups_amount_sum += m_sum
-        m_txt = f"{m_sum / 10000:.2f} 萬" if m_sum >= 10000 else f"{m_sum:,.2f}"
+        # Always show exact HKD (2dp) so 四組相加 equals weekly total with no 萬-rounding drift.
+        m_txt = f"{m_sum:,.2f}"
         group_html += f"""<div class="k-card panel">
       <div class="k-title">第{i}組 · {g['name']}</div>
       <div class="k-metric">最近交易天數：<b>{g['recency']:.2f}</b></div>
