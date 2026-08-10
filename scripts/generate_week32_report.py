@@ -30,10 +30,21 @@ from scipy import stats
 from scipy.stats import gaussian_kde
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
+from zhconv import convert as zh_convert
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_DIR = ROOT / "reports"
 REPORT_DIR.mkdir(exist_ok=True)
+
+
+def to_trad(text) -> str:
+    """Convert Simplified Chinese display text to Traditional (Hong Kong)."""
+    if text is None or (isinstance(text, float) and np.isnan(text)):
+        return ""
+    s = str(text).strip()
+    if not s or s.lower() == "nan":
+        return ""
+    return zh_convert(s, "zh-hk")
 
 for name in ["WenQuanYi Micro Hei", "Droid Sans Fallback"]:
     try:
@@ -255,12 +266,19 @@ def main() -> None:
     week = df[(df["created_at"] >= week_start) & (df["created_at"] < week_end)].copy()
     hist = df[df["created_at"] < week_start].copy()
     all_hist = df.copy()
+    week = week.copy()
+    week["product"] = week["product"].map(lambda x: to_trad(x) if pd.notna(x) else x)
+    week["customer"] = week["customer"].map(lambda x: to_trad(x) if pd.notna(x) else x)
+    hist = hist.copy()
+    hist["customer"] = hist["customer"].map(lambda x: to_trad(x) if pd.notna(x) else x)
+    all_hist = all_hist.copy()
+    all_hist["customer"] = all_hist["customer"].map(lambda x: to_trad(x) if pd.notna(x) else x)
     week_orders = week.drop_duplicates("erp")
 
     data_note = ""
     if "第32周" not in order_path.name:
         data_note = (
-            f"注意：工作區未找到「区分客户自助下单_20260521_006_第32周.xlsx」，"
+            f"注意：工作區未找到「區分客戶自助下單_20260521_006_第32周.xlsx」，"
             f"已改用「{order_path.name}」。該檔最新時間為 {df['created_at'].max()}。"
         )
 
@@ -367,7 +385,7 @@ def main() -> None:
         ant_col = col_map.get("antecedents", 1)
         con_col = col_map.get("consequents", 2)
         ant, con = ws.cell(r, ant_col).value, ws.cell(r, con_col).value
-        ant_i, con_i = parse_fs(ant), parse_fs(con)
+        ant_i, con_i = [to_trad(x) for x in parse_fs(ant)], [to_trad(x) for x in parse_fs(con)]
         support = float(ws.cell(r, col_map.get("support", 5)).value)
         confidence = float(ws.cell(r, col_map.get("confidence", 6)).value)
         lift = float(ws.cell(r, col_map.get("lift", 7)).value)
@@ -377,7 +395,7 @@ def main() -> None:
         if "common_category" in col_map:
             cc = ws.cell(r, col_map["common_category"]).value
             if cc is not None and str(cc).strip() != "":
-                extra["common_category"] = cc
+                extra["common_category"] = to_trad(cc)
         if "category_internal_support" in col_map:
             cis = ws.cell(r, col_map["category_internal_support"]).value
             if cis is not None and str(cis).strip() != "" and not (isinstance(cis, float) and np.isnan(cis)):
@@ -389,13 +407,13 @@ def main() -> None:
             "common_category" not in extra or "category_internal_support" not in extra
         ):
             for _, srow in same_df.iterrows():
-                if set(parse_fs(srow.get("antecedents"))) == set(ant_i) and set(
-                    parse_fs(srow.get("consequents"))
-                ) == set(con_i):
+                s_ant = {to_trad(x) for x in parse_fs(srow.get("antecedents"))}
+                s_con = {to_trad(x) for x in parse_fs(srow.get("consequents"))}
+                if s_ant == set(ant_i) and s_con == set(con_i):
                     if "common_category" not in extra and "common_category" in srow and pd.notna(
                         srow["common_category"]
                     ):
-                        extra["common_category"] = srow["common_category"]
+                        extra["common_category"] = to_trad(srow["common_category"])
                     if (
                         "category_internal_support" not in extra
                         and "category_internal_support" in srow
@@ -428,6 +446,7 @@ def main() -> None:
         raise KeyError(f"凍肉.xlsx 找不到小类列，現有：{list(frozen.columns)}")
     frozen = frozen.dropna(subset=[attr_col, cat_col]).copy()
     frozen[attr_col] = frozen[attr_col].map(normalize_attr)
+    frozen[cat_col] = frozen[cat_col].map(to_trad)
     frozen = frozen.dropna(subset=[attr_col, cat_col])
     ct = pd.crosstab(frozen[attr_col], frozen[cat_col])
     _, _, _, expected = stats.chi2_contingency(ct)
@@ -455,29 +474,42 @@ def main() -> None:
         attrs_t = list(resid2.index)[:5]
     rt = resid2.loc[attrs_t, hours_show] if attrs_t and hours_show else resid2.iloc[:1, :1]
 
-    # K-means RFM on all historical registered orders
-    cust_all = all_hist.drop_duplicates("erp")[["customer", "erp", "amount", "created_at"]]
+    # K-means RFM on THIS WEEK's registered orders (ERP-deduped).
+    # Prior bug: using full-history cumulative monetary made group means
+    # (e.g. VIP ~14.7萬) exceed the weekly total (~14萬). Frequency and
+    # monetary are therefore scoped to the report week; recency still uses
+    # each customer's most recent historical order ("距今最近一次").
+    week_cust = week.drop_duplicates("erp")[["customer", "erp", "amount", "created_at"]]
     rfm = (
-        cust_all.groupby("customer")
+        week_cust.groupby("customer")
         .agg(
-            last_date=("created_at", "max"),
             frequency=("erp", "nunique"),
             monetary=("amount", "sum"),
         )
         .reset_index()
     )
-    rfm["recency"] = (as_of - rfm["last_date"]).dt.days.clip(lower=0)
-    rfm = rfm.dropna()
-    x_log = np.column_stack(
-        [rfm["recency"].values, np.log1p(rfm["frequency"].values), np.log1p(rfm["monetary"].values)]
+    hist_last = (
+        all_hist.drop_duplicates("erp")
+        .groupby("customer")["created_at"]
+        .max()
     )
-    xs = StandardScaler().fit_transform(x_log)
-    rfm["cluster"] = KMeans(n_clusters=4, random_state=42, n_init=30).fit_predict(xs)
+    rfm["last_date"] = rfm["customer"].map(hist_last)
+    rfm["recency"] = (as_of - rfm["last_date"]).dt.days.clip(lower=0)
+    rfm = rfm.dropna(subset=["recency", "frequency", "monetary"])
+    n_clusters = min(4, max(1, len(rfm)))
+    if len(rfm) >= 2 and n_clusters >= 2:
+        x_log = np.column_stack(
+            [rfm["recency"].values, np.log1p(rfm["frequency"].values), np.log1p(rfm["monetary"].values)]
+        )
+        xs = StandardScaler().fit_transform(x_log)
+        rfm["cluster"] = KMeans(n_clusters=n_clusters, random_state=42, n_init=30).fit_predict(xs)
+    else:
+        rfm["cluster"] = 0
     label_names = ["超級VIP核心大客", "高價值活躍戶", "中等價值常規戶", "低價值沉睡戶"]
     raw_centers = []
-    for i in range(4):
+    for i in sorted(rfm["cluster"].unique()):
         sub = rfm[rfm["cluster"] == i]
-        raw_centers.append((sub["monetary"].mean(), sub["frequency"].mean(), -sub["recency"].mean(), i))
+        raw_centers.append((sub["monetary"].mean(), sub["frequency"].mean(), -sub["recency"].mean(), int(i)))
     raw_centers.sort(reverse=True)
     order = [x[3] for x in raw_centers]
     cluster_map = {old: new for new, old in enumerate(order)}
@@ -491,7 +523,8 @@ def main() -> None:
                 "recency": float(members["recency"].mean()) if len(members) else 0.0,
                 "frequency": float(members["frequency"].mean()) if len(members) else 0.0,
                 "monetary": float(members["monetary"].mean()) if len(members) else 0.0,
-                "customers": members["customer"].tolist(),
+                "monetary_sum": float(members["monetary"].sum()) if len(members) else 0.0,
+                "customers": [to_trad(c) for c in members["customer"].tolist()],
             }
         )
 
@@ -739,7 +772,7 @@ def main() -> None:
     ax.set_xticklabels(bin_labels, color="#111", fontsize=8)
     ax.tick_params(colors="#111")
     ax.set_ylabel("訂單筆數", color="#111")
-    ax.set_title("客戶下單金額分布（直方圖 + 核密度估計）", color="#0b7285", fontsize=11)
+    ax.set_title("客戶下單金額分佈（直方圖 + 核密度估計）", color="#0b7285", fontsize=11)
     ax.legend(facecolor="white", edgecolor="#ddd", labelcolor="#111", fontsize=8)
     for spine in ax.spines.values():
         spine.set_color("#bbb")
@@ -1057,7 +1090,7 @@ th,td {{ padding:4px 6px; }}
   <div class="nav">
     <a href="#s1">推送成效</a><a href="#s2">客戶轉化</a><a href="#s3">雷達圖</a><a href="#s4">客戶屬性</a>
     <a href="#s5">殘差分析</a><a href="#s6">K-means</a><a href="#s7">關聯規則</a><a href="#s8">客戶/產品</a>
-    <a href="#s10">熱力/二八</a><a href="#s12">金額分布</a><a href="#s13">整體情況</a>
+    <a href="#s10">熱力/二八</a><a href="#s12">金額分佈</a><a href="#s13">整體情況</a>
   </div>
   {"<p class='warn'>" + data_note + "</p>" if data_note else ""}
 
@@ -1113,7 +1146,7 @@ th,td {{ padding:4px 6px; }}
   <div class="page" id="page3">
   <h2 class="sec" id="s6">六、K-means 客戶聚類分析</h2>
   <div class="grid k-grid">{group_html}</div>
-  <p class="note">特徵：最近交易天數（R）、交易頻次（O 去重）、交易金額（L，同 ERP 不重複）；全歷史已登記訂單；as_of={as_of.date()}。</p>
+  <p class="note">特徵：最近交易天數（R，依歷史最後一筆距今）、交易頻次／交易金額（本週 O／L，同 ERP 不重複）。聚類對象為本週已登記下單客戶；四組本週金額合計等於本週總額 {total_amount:,.2f} 港元；數值為各組均值中心；as_of={as_of.date()}。</p>
 
   <h2 class="sec" id="s7">七、關聯規則 · 重點品項搭售組合</h2>
   <p class="note">依 {rules_source} 標黃組合；若同中類子表有對應指標則附加。Support＝組合佔比，Confidence＝搭售轉化率，Lift＝搭售提升倍數。</p>
@@ -1146,9 +1179,9 @@ th,td {{ padding:4px 6px; }}
     <div class="editable" contenteditable="true" data-key="pareto_note">請在此書寫本週二八集中度結論……</div>
   </div>
 
-  <h2 class="sec" id="s12">十二、圖五．客戶下單金額分布（直方圖＋核密度估計）</h2>
+  <h2 class="sec" id="s12">十二、圖五．客戶下單金額分佈（直方圖＋核密度估計）</h2>
   <p class="note">歷史全量 O列去重共 {len(amt_hist)} 筆、{amt_hist["amount"].nunique()} 個不同金額（L列）。</p>
-  <img class="img md" src="data:image/png;base64,{amt_b64}" alt="金額分布" />
+  <img class="img md" src="data:image/png;base64,{amt_b64}" alt="金額分佈" />
   <table style="margin-top:6px">
     <thead><tr><th>金額區間（港元）</th><th>訂單筆數</th><th>KDE</th></tr></thead>
     <tbody>{amt_table_rows}</tbody>
