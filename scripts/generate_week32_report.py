@@ -256,6 +256,27 @@ def main() -> None:
     df["qty_box"] = pd.to_numeric(df["qty_box"], errors="coerce")
     df = df[df["status"].astype(str).str.contains("登记|登記", na=False)].copy()
     df = df[df["erp"].notna() & (df["erp"].astype(str).str.strip() != "")].copy()
+    # Fill blank 客名 so weekly amounts are not dropped from K-means groupby
+    def _is_blank_cust(v) -> bool:
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return True
+        s = str(v).strip()
+        return (not s) or s.lower() == "nan"
+
+    blank_m = df["customer"].map(_is_blank_cust)
+    if blank_m.any():
+        erp_name = (
+            df.loc[~blank_m]
+            .assign(_c=lambda x: x["customer"].astype(str).str.strip())
+            .groupby("erp")["_c"]
+            .first()
+        )
+        df.loc[blank_m, "customer"] = df.loc[blank_m, "erp"].map(erp_name)
+        blank_m = df["customer"].map(_is_blank_cust)
+        if blank_m.any() and "客户" in df.columns:
+            df.loc[blank_m, "customer"] = df.loc[blank_m, "客户"].astype(str).str.strip()
+        blank_m = df["customer"].map(_is_blank_cust)
+        df.loc[blank_m, "customer"] = "（未命名）"
     df["attr"] = df.apply(resolve_row_attr, axis=1)
 
     # Week 32: 2026-08-03 ~ 2026-08-09
