@@ -242,30 +242,34 @@ th,td { padding:4px 6px; }
   <h2 class="sec" id="s6">六、K-means 客戶聚類分析</h2>
   <div class="grid k-grid"><div class="k-card panel">
       <div class="k-title">第1組 · 超級VIP核心大客</div>
-      <div class="k-metric">最近交易天數：<b>0.83</b></div>
-      <div class="k-metric">交易頻次：<b>4.67</b></div>
-      <div class="k-metric">交易金額：<b>1.6 萬</b></div>
+      <div class="k-metric">最近交易天數（均值）：<b>0.83</b></div>
+      <div class="k-metric">交易頻次（均值）：<b>4.67</b></div>
+      <div class="k-metric">交易金額（組內合計）：<b>9.73 萬</b></div>
+      <div class="k-metric" style="opacity:.85;font-size:11px;">交易金額（均值中心）：1.62 萬</div>
       <div class="k-list">翎凰、恆輝、新昌、明記、新城發、天恆</div>
     </div><div class="k-card panel">
       <div class="k-title">第2組 · 高價值活躍戶</div>
-      <div class="k-metric">最近交易天數：<b>2.00</b></div>
-      <div class="k-metric">交易頻次：<b>2.00</b></div>
-      <div class="k-metric">交易金額：<b>5,212.57</b></div>
+      <div class="k-metric">最近交易天數（均值）：<b>2.00</b></div>
+      <div class="k-metric">交易頻次（均值）：<b>2.00</b></div>
+      <div class="k-metric">交易金額（組內合計）：<b>3.65 萬</b></div>
+      <div class="k-metric" style="opacity:.85;font-size:11px;">交易金額（均值中心）：5,212.57</div>
       <div class="k-list">佳城興業、信隆、溢利、明記冷凍、信希、恆昌、誠信</div>
     </div><div class="k-card panel">
       <div class="k-title">第3組 · 中等價值常規戶</div>
-      <div class="k-metric">最近交易天數：<b>0.33</b></div>
-      <div class="k-metric">交易頻次：<b>1.00</b></div>
-      <div class="k-metric">交易金額：<b>1,857.95</b></div>
+      <div class="k-metric">最近交易天數（均值）：<b>0.33</b></div>
+      <div class="k-metric">交易頻次（均值）：<b>1.00</b></div>
+      <div class="k-metric">交易金額（組內合計）：<b>5,573.85</b></div>
+      <div class="k-metric" style="opacity:.85;font-size:11px;">交易金額（均值中心）：1,857.95</div>
       <div class="k-list">天后肉食、再豐、祥興</div>
     </div><div class="k-card panel">
       <div class="k-title">第4組 · 低價值沉睡戶</div>
-      <div class="k-metric">最近交易天數：<b>4.50</b></div>
-      <div class="k-metric">交易頻次：<b>1.00</b></div>
-      <div class="k-metric">交易金額：<b>297.30</b></div>
+      <div class="k-metric">最近交易天數（均值）：<b>4.50</b></div>
+      <div class="k-metric">交易頻次（均值）：<b>1.00</b></div>
+      <div class="k-metric">交易金額（組內合計）：<b>594.60</b></div>
+      <div class="k-metric" style="opacity:.85;font-size:11px;">交易金額（均值中心）：297.30</div>
       <div class="k-list">駿利貿易公司、駿利</div>
     </div></div>
-  <p class="note">特徵：最近交易天數（R，依歷史最後一筆距今）、交易頻次／交易金額（本週 O／L，同 ERP 不重複）。聚類對象為本週已登記下單客戶；四組本週金額合計等於本週總額 139,996.27 港元；數值為各組均值中心；as_of=2026-08-10。</p>
+  <p class="note">特徵：最近交易天數／交易頻次為各組<strong>均值中心</strong>；交易金額同時列出<strong>組內合計</strong>（四組相加＝本週總額 139,996.27 港元）與均值中心。金額／頻次取本週 O／L（同 ERP 不重複），最近交易天數依歷史最後一筆；as_of=2026-08-10。</p>
 
   <h2 class="sec" id="s7">七、關聯規則 · 重點品項搭售組合</h2>
   <p class="note">依 多元分析_第32周.xlsx（product_level_rules 工作表） 標黃組合；若同中類子表有對應指標則附加。Support＝組合佔比，Confidence＝搭售轉化率，Lift＝搭售提升倍數。</p>

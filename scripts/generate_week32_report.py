@@ -888,10 +888,14 @@ def main() -> None:
     ) or "（無）"
 
     group_html = ""
+    groups_amount_sum = 0.0
     for i, g in enumerate(groups, 1):
         names = "、".join(g["customers"]) if g["customers"] else "（無）"
-        m = g["monetary"]
-        m_txt = f"{m / 10000:.1f} 萬" if m >= 10000 else f"{m:,.2f}"
+        # Display 組內合計 for monetary so 四組相加 = 本週總額.
+        # (均值中心相加 ≠ 總額，先前因此被誤讀。)
+        m_sum = g["monetary_sum"]
+        groups_amount_sum += m_sum
+        m_txt = f"{m_sum / 10000:.2f} 萬" if m_sum >= 10000 else f"{m_sum:,.2f}"
         group_html += f"""<div class="k-card panel">
       <div class="k-title">第{i}組 · {g['name']}</div>
       <div class="k-metric">最近交易天數：<b>{g['recency']:.2f}</b></div>
@@ -899,6 +903,10 @@ def main() -> None:
       <div class="k-metric">交易金額：<b>{m_txt}</b></div>
       <div class="k-list">{names}</div>
     </div>"""
+    if n_orders and abs(groups_amount_sum - total_amount) > 0.05:
+        raise RuntimeError(
+            f"K-means 四組金額合計 {groups_amount_sum:.2f} ≠ 本週總額 {total_amount:.2f}"
+        )
 
     amt_table_rows = "".join(
         f"<tr><td>{lab}</td><td>{int(c)}</td><td>{k:.3f}</td></tr>"
@@ -1167,7 +1175,7 @@ th,td {{ padding:4px 6px; }}
   <div class="page" id="page3">
   <h2 class="sec" id="s6">六、K-means 客戶聚類分析</h2>
   <div class="grid k-grid">{group_html}</div>
-  <p class="note">特徵：最近交易天數（R，依歷史最後一筆距今）、交易頻次／交易金額（本週 O／L，同 ERP 不重複）。聚類對象為本週已登記下單客戶；四組本週金額合計等於本週總額 {total_amount:,.2f} 港元；數值為各組均值中心；as_of={as_of.date()}。</p>
+  <p class="note">最近交易天數／交易頻次為各組均值中心；交易金額為各組本週<strong>組內合計</strong>（四組相加＝本週總額 {total_amount:,.2f} 港元）。金額／頻次取本週 O／L（同 ERP 不重複），最近交易天數依歷史最後一筆；as_of={as_of.date()}。</p>
 
   <h2 class="sec" id="s7">七、關聯規則 · 重點品項搭售組合</h2>
   <p class="note">依 {rules_source} 標黃組合；若同中類子表有對應指標則附加。Support＝組合佔比，Confidence＝搭售轉化率，Lift＝搭售提升倍數。</p>
